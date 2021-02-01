@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator.scalar;
 
+import com.facebook.presto.common.type.ArrayType;
 import com.facebook.presto.common.type.SqlVarbinary;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.common.type.TypeParameter;
@@ -34,8 +35,10 @@ import java.util.List;
 
 import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
 import static com.facebook.presto.common.type.DoubleType.DOUBLE;
+import static com.facebook.presto.common.type.IntegerType.INTEGER;
 import static com.facebook.presto.common.type.TDigestParametricType.TDIGEST;
 import static com.facebook.presto.common.type.TypeSignature.parseTypeSignature;
+import static com.facebook.presto.operator.scalar.TDigestFunctions.TDIGEST_CENTROIDS_ROW_TYPE;
 import static com.facebook.presto.tdigest.TDigest.createTDigest;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.airlift.slice.Slices.wrappedBuffer;
@@ -408,6 +411,37 @@ public class TestTDigestFunctions
         for (int i = 0; i < quantiles.length; i++) {
             assertContinuousQuantileWithinBound(quantiles[i], STANDARD_ERROR, list, tDigest);
         }
+    }
+
+    @Test
+    public void testGetCentroids()
+    {
+        TDigest tDigest = createTDigest(STANDARD_COMPRESSION_FACTOR);
+        addAll(tDigest, 0.0d, 1.0d, 2.0d, 3.0d, 4.0d, 5.0d, 6.0d, 7.0d, 8.0d, 9.0d);
+
+        String sql = format("tdigest_centroids(CAST(X'%s' AS tdigest(%s)))",
+                new SqlVarbinary(tDigest.serialize().getBytes()).toString().replaceAll("\\s+", " "),
+                DOUBLE);
+
+        functionAssertions.assertFunction(
+                sql,
+                TDIGEST_CENTROIDS_ROW_TYPE,
+                ImmutableList.of(
+                        ImmutableList.of(0.0d, 1.0d, 2.0d, 3.0d, 4.0d, 5.0d, 6.0d, 7.0d, 8.0d, 9.0d),
+                        ImmutableList.of(1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+                        0.0d, 9.0d, 10));
+
+        functionAssertions.assertFunction(format("%s.min", sql), DOUBLE, 0.0d);
+        functionAssertions.assertFunction(format("%s.max", sql), DOUBLE, 9.0d);
+        functionAssertions.assertFunction(format("%s.count", sql), INTEGER, 10);
+        functionAssertions.assertFunction(
+                format("%s.centroid_means", sql),
+                new ArrayType(DOUBLE),
+                ImmutableList.of(0.0d, 1.0d, 2.0d, 3.0d, 4.0d, 5.0d, 6.0d, 7.0d, 8.0d, 9.0d));
+        functionAssertions.assertFunction(
+                format("%s.centroid_weights", sql),
+                new ArrayType(INTEGER),
+                ImmutableList.of(1, 1, 1, 1, 1, 1, 1, 1, 1, 1));
     }
 
     // disabled because test takes almost 10s
