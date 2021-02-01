@@ -36,6 +36,7 @@ import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
 import static com.facebook.presto.common.type.DoubleType.DOUBLE;
 import static com.facebook.presto.common.type.TDigestParametricType.TDIGEST;
 import static com.facebook.presto.common.type.TypeSignature.parseTypeSignature;
+import static com.facebook.presto.operator.scalar.TDigestFunctions.TDIGEST_CENTROIDS_ROW_TYPE;
 import static com.facebook.presto.tdigest.TDigest.createTDigest;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.airlift.slice.Slices.wrappedBuffer;
@@ -82,10 +83,18 @@ public class TestTDigestFunctions
     @Test(expectedExceptions = IllegalArgumentException.class)
     public void testGetValueAtQuantileBelowZero()
     {
-        functionAssertions.assertFunction(format("value_at_quantile(CAST(X'%s' AS tdigest(double)), -0.2)",
-                new SqlVarbinary(createTDigest(STANDARD_COMPRESSION_FACTOR).serialize().getBytes()).toString().replaceAll("\\s+", " ")),
+        TDigest tDigest = createTDigest(STANDARD_COMPRESSION_FACTOR);
+        tDigest.add(10.0);
+        functionAssertions.assertFunction(
+                format("tdigest_centroids(CAST(X'%s' AS tdigest(%s)))",
+                        new SqlVarbinary(tDigest.serialize().getBytes()).toString().replaceAll("\\s+", " "),
+                        DOUBLE),
                 DOUBLE,
-                null);
+                10.0);
+//        functionAssertions.assertFunction(format("value_at_quantile(CAST(X'%s' AS tdigest(double)), -0.2)",
+//                new SqlVarbinary(createTDigest(STANDARD_COMPRESSION_FACTOR).serialize().getBytes()).toString().replaceAll("\\s+", " ")),
+//                DOUBLE,
+//                null);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)
@@ -129,6 +138,23 @@ public class TestTDigestFunctions
         for (int i = 0; i < quantiles.length; i++) {
             assertValueWithinBound(quantiles[i], STANDARD_ERROR, list, tDigest1);
         }
+    }
+
+    @Test
+    public void testGetCentroids()
+    {
+        TDigest tDigest = createTDigest(STANDARD_COMPRESSION_FACTOR);
+        tDigest.add(2.0);
+        tDigest.add(4.0);
+        functionAssertions.assertFunction(
+                format("tdigest_centroids(CAST(X'%s' AS tdigest(%s)))",
+                        new SqlVarbinary(tDigest.serialize().getBytes()).toString().replaceAll("\\s+", " "),
+                        DOUBLE),
+                TDIGEST_CENTROIDS_ROW_TYPE,
+                ImmutableList.of(
+                        ImmutableList.of(2.0, 4.0),
+                        ImmutableList.of(1, 1),
+                        2.0, 4.0, 2));
     }
 
     @Test
