@@ -141,6 +141,23 @@ public class TestTDigestFunctions
     }
 
     @Test
+    public void testGetCentroids()
+    {
+        TDigest tDigest = createTDigest(STANDARD_COMPRESSION_FACTOR);
+        tDigest.add(2.0);
+        tDigest.add(4.0);
+        functionAssertions.assertFunction(
+                format("tdigest_centroids(CAST(X'%s' AS tdigest(%s)))",
+                        new SqlVarbinary(tDigest.serialize().getBytes()).toString().replaceAll("\\s+", " "),
+                        DOUBLE),
+                TDIGEST_CENTROIDS_ROW_TYPE,
+                ImmutableList.of(
+                        ImmutableList.of(2.0, 4.0),
+                        ImmutableList.of(1, 1),
+                        2.0, 4.0, 2));
+    }
+
+    @Test
     public void testGetQuantileAtValueOutsideRange()
     {
         TDigest tDigest = createTDigest(STANDARD_COMPRESSION_FACTOR);
