@@ -56,6 +56,7 @@ public class TestMergeTDigestFunction
         return actual.getSize() == expected.getSize() &&
                 actual.getMin() == expected.getMin() &&
                 actual.getMax() == expected.getMax() &&
+                actual.getSum() == expected.getSum() &&
                 actual.getCompressionFactor() == expected.getCompressionFactor();
     };
 

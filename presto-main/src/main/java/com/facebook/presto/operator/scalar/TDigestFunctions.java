@@ -13,16 +13,23 @@
  */
 package com.facebook.presto.operator.scalar;
 
+import com.facebook.presto.common.PageBuilder;
 import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.block.BlockBuilder;
+import com.facebook.presto.common.type.ArrayType;
+import com.facebook.presto.common.type.RowType;
 import com.facebook.presto.common.type.StandardTypes;
 import com.facebook.presto.spi.function.Description;
 import com.facebook.presto.spi.function.ScalarFunction;
 import com.facebook.presto.spi.function.SqlType;
+import com.facebook.presto.tdigest.Centroid;
 import com.facebook.presto.tdigest.TDigest;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import io.airlift.slice.Slice;
 
 import static com.facebook.presto.common.type.DoubleType.DOUBLE;
+import static com.facebook.presto.common.type.IntegerType.INTEGER;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_FUNCTION_ARGUMENT;
 import static com.facebook.presto.spi.function.SqlFunctionVisibility.EXPERIMENTAL;
 import static com.facebook.presto.tdigest.TDigest.createTDigest;
@@ -31,6 +38,16 @@ import static com.facebook.presto.util.Failures.checkCondition;
 public final class TDigestFunctions
 {
     public static final double DEFAULT_COMPRESSION = 100;
+
+    @VisibleForTesting
+    static final RowType TDIGEST_CENTROIDS_ROW_TYPE = RowType.from(
+            ImmutableList.of(
+                    RowType.field("centroid_means", new ArrayType(DOUBLE)),
+                    RowType.field("centroid_weights", new ArrayType(INTEGER)),
+                    RowType.field("min", DOUBLE),
+                    RowType.field("max", DOUBLE),
+                    RowType.field("sum", DOUBLE),
+                    RowType.field("count", INTEGER)));
 
     private TDigestFunctions() {}
 
@@ -85,5 +102,40 @@ public final class TDigestFunctions
         TDigest digest = createTDigest(input);
         digest.scale(scale);
         return digest.serialize();
+    }
+
+    @ScalarFunction(value = "tdigest_centroids", visibility = EXPERIMENTAL)
+    @Description("Return the raw TDigest, including arrays of centroid means and weights, as well as min, max, and count.")
+    @SqlType("row(centroid_means array(double), centroid_weights array(integer), min double, max double, sum double, count integer)")
+    public static Block getCentroids(@SqlType("tdigest(double)") Slice input)
+    {
+        TDigest tDigest = createTDigest(input);
+
+        PageBuilder pageBuilder = new PageBuilder(ImmutableList.of(TDIGEST_CENTROIDS_ROW_TYPE));
+        BlockBuilder blockBuilder = pageBuilder.getBlockBuilder(0);
+        BlockBuilder rowBuilder = blockBuilder.beginBlockEntry();
+
+        // Write centroid means / weights
+        BlockBuilder meansBuilder = DOUBLE.createBlockBuilder(null, tDigest.centroidCount());
+        BlockBuilder weightsBuilder = INTEGER.createBlockBuilder(null, tDigest.centroidCount());
+        int count = 0;
+        for (Centroid centroid : tDigest.centroids()) {
+            int weight = centroid.getWeight();
+            DOUBLE.writeDouble(meansBuilder, centroid.getMean());
+            INTEGER.writeLong(weightsBuilder, weight);
+            count += weight;
+        }
+        rowBuilder.appendStructure(meansBuilder);
+        rowBuilder.appendStructure(weightsBuilder);
+
+        // Write min, max, count
+        DOUBLE.writeDouble(rowBuilder, tDigest.getMin());
+        DOUBLE.writeDouble(rowBuilder, tDigest.getMax());
+        DOUBLE.writeDouble(rowBuilder, tDigest.getSum());
+        INTEGER.writeLong(rowBuilder, count);
+
+        blockBuilder.closeEntry();
+        pageBuilder.declarePosition();
+        return TDIGEST_CENTROIDS_ROW_TYPE.getObject(blockBuilder, blockBuilder.getPositionCount() - 1);
     }
 }
