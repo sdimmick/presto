@@ -13,7 +13,6 @@
  */
 package com.facebook.presto.operator.scalar;
 
-import com.facebook.presto.common.PageBuilder;
 import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.block.BlockBuilder;
 import com.facebook.presto.common.type.ArrayType;
@@ -112,8 +111,7 @@ public final class TDigestFunctions
     {
         TDigest tDigest = createTDigest(input);
 
-        PageBuilder pageBuilder = new PageBuilder(ImmutableList.of(TDIGEST_CENTROIDS_ROW_TYPE));
-        BlockBuilder blockBuilder = pageBuilder.getBlockBuilder(0);
+        BlockBuilder blockBuilder = TDIGEST_CENTROIDS_ROW_TYPE.createBlockBuilder(null, 1);
         BlockBuilder rowBuilder = blockBuilder.beginBlockEntry();
 
         // Centroid means / weights
@@ -137,7 +135,6 @@ public final class TDigestFunctions
         INTEGER.writeLong(rowBuilder, count);
 
         blockBuilder.closeEntry();
-        pageBuilder.declarePosition();
         return TDIGEST_CENTROIDS_ROW_TYPE.getObject(blockBuilder, blockBuilder.getPositionCount() - 1);
     }
 }
