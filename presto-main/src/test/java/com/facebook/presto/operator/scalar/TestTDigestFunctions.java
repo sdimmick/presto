@@ -414,27 +414,29 @@ public class TestTDigestFunctions
     }
 
     @Test
-    public void testGetCentroids()
+    public void testDestructureTDigest()
     {
         TDigest tDigest = createTDigest(STANDARD_COMPRESSION_FACTOR);
         ImmutableList<Double> values = ImmutableList.of(0.0d, 1.0d, 2.0d, 3.0d, 4.0d, 5.0d, 6.0d, 7.0d, 8.0d, 9.0d);
         values.stream().forEach(tDigest::add);
 
         List<Integer> weights = Collections.nCopies(values.size(), 1);
+        double compression = Double.valueOf(STANDARD_COMPRESSION_FACTOR);
         double min = values.stream().reduce(Double.POSITIVE_INFINITY, Double::min);
         double max = values.stream().reduce(Double.NEGATIVE_INFINITY, Double::max);
         double sum = values.stream().reduce(0.0d, Double::sum);
         int count = values.size();
 
-        String sql = format("tdigest_centroids(CAST(X'%s' AS tdigest(%s)))",
+        String sql = format("destructure_tdigest(CAST(X'%s' AS tdigest(%s)))",
                 new SqlVarbinary(tDigest.serialize().getBytes()).toString().replaceAll("\\s+", " "),
                 DOUBLE);
 
         functionAssertions.assertFunction(
                 sql,
                 TDIGEST_CENTROIDS_ROW_TYPE,
-                ImmutableList.of(values, weights, min, max, sum, count));
+                ImmutableList.of(values, weights, compression, min, max, sum, count));
 
+        functionAssertions.assertFunction(format("%s.compression", sql), DOUBLE, compression);
         functionAssertions.assertFunction(format("%s.min", sql), DOUBLE, min);
         functionAssertions.assertFunction(format("%s.max", sql), DOUBLE, max);
         functionAssertions.assertFunction(format("%s.sum", sql), DOUBLE, sum);
@@ -450,7 +452,7 @@ public class TestTDigestFunctions
     }
 
     @Test
-    public void testGetCentroidsLarge()
+    public void testDestructureTDigestLarge()
     {
         TDigest tDigest = createTDigest(STANDARD_COMPRESSION_FACTOR);
         List<Double> values = new ArrayList<>();
@@ -460,15 +462,17 @@ public class TestTDigestFunctions
 
         values.stream().forEach(tDigest::add);
 
+        double compression = Double.valueOf(STANDARD_COMPRESSION_FACTOR);
         double min = values.stream().reduce(Double.POSITIVE_INFINITY, Double::min);
         double max = values.stream().reduce(Double.NEGATIVE_INFINITY, Double::max);
         double sum = values.stream().reduce(0.0d, Double::sum);
         int count = values.size();
 
-        String sql = format("tdigest_centroids(CAST(X'%s' AS tdigest(%s)))",
+        String sql = format("destructure_tdigest(CAST(X'%s' AS tdigest(%s)))",
                 new SqlVarbinary(tDigest.serialize().getBytes()).toString().replaceAll("\\s+", " "),
                 DOUBLE);
 
+        functionAssertions.assertFunction(format("%s.compression", sql), DOUBLE, compression);
         functionAssertions.assertFunction(format("%s.min", sql), DOUBLE, min);
         functionAssertions.assertFunction(format("%s.max", sql), DOUBLE, max);
         functionAssertions.assertFunction(format("%s.sum", sql), DOUBLE, sum);

@@ -44,6 +44,7 @@ public final class TDigestFunctions
             ImmutableList.of(
                     RowType.field("centroid_means", new ArrayType(DOUBLE)),
                     RowType.field("centroid_weights", new ArrayType(INTEGER)),
+                    RowType.field("compression", DOUBLE),
                     RowType.field("min", DOUBLE),
                     RowType.field("max", DOUBLE),
                     RowType.field("sum", DOUBLE),
@@ -104,10 +105,10 @@ public final class TDigestFunctions
         return digest.serialize();
     }
 
-    @ScalarFunction(value = "tdigest_centroids", visibility = EXPERIMENTAL)
-    @Description("Return the raw TDigest, including arrays of centroid means and weights, as well as min, max, sum, and count.")
-    @SqlType("row(centroid_means array(double), centroid_weights array(integer), min double, max double, sum double, count integer)")
-    public static Block getCentroids(@SqlType("tdigest(double)") Slice input)
+    @ScalarFunction(value = "destructure_tdigest", visibility = EXPERIMENTAL)
+    @Description("Return the raw TDigest, including arrays of centroid means and weights, as well as min, max, sum, count, and compression factor.")
+    @SqlType("row(centroid_means array(double), centroid_weights array(integer), compression double, min double, max double, sum double, count integer)")
+    public static Block destructureTDigest(@SqlType("tdigest(double)") Slice input)
     {
         TDigest tDigest = createTDigest(input);
 
@@ -128,7 +129,8 @@ public final class TDigestFunctions
         rowBuilder.appendStructure(meansBuilder);
         rowBuilder.appendStructure(weightsBuilder);
 
-        // Min, max, sum, count
+        // Compression, min, max, sum, count
+        DOUBLE.writeDouble(rowBuilder, tDigest.getCompressionFactor());
         DOUBLE.writeDouble(rowBuilder, tDigest.getMin());
         DOUBLE.writeDouble(rowBuilder, tDigest.getMax());
         DOUBLE.writeDouble(rowBuilder, tDigest.getSum());
